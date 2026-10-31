@@ -14,15 +14,23 @@ export const VisitsPage = {
         const ownerId = route.params.ownerId;
         const petId = route.params.petId;
         const visits = ref([]);
+        const vets = ref([]);
         const form = reactive({
             date: today(),
-            description: ''
+            description: '',
+            vetId: ''
         });
         const url = `/api/visit/owners/${ownerId}/pets/${petId}/visits`;
         const state = useRequest(async ({ signal }) => {
+            vets.value = requireArray(await request('/api/vet/vets', { signal }), 'Veterinarians could not be loaded.');
             visits.value = requireArray(await request(url, { signal }), 'Visits could not be loaded.');
         });
         const submission = useSubmission();
+
+        function vetName(visit) {
+            const vet = vets.value.find((candidate) => candidate.id === visit.vetId);
+            return vet ? `${vet.firstName} ${vet.lastName}` : '—';
+        }
 
         async function submit(event) {
             if (!event.target.reportValidity() || submission.submitting.value) {
@@ -35,7 +43,8 @@ export const VisitsPage = {
                     await request(url, {
                         ...jsonRequest('POST', {
                             date: form.date,
-                            description: form.description.trim()
+                            description: form.description.trim(),
+                            vetId: Number(form.vetId)
                         }),
                         signal
                     });
@@ -51,11 +60,13 @@ export const VisitsPage = {
         return {
             form,
             visits,
+            vets,
             loading: state.loading,
             failed: state.failed,
             failure: state.failure,
             submitting: submission.submitting,
             clearError,
+            vetName,
             submit
         };
     },
@@ -65,7 +76,7 @@ export const VisitsPage = {
             <load-failure v-else-if="failed" :error="failure" resource="Visit data"></load-failure>
             <div v-else>
                 <h2>Visits</h2>
-                <form @input="clearError" @submit.prevent="submit">
+                <form @input="clearError" @change="clearError" @submit.prevent="submit">
                     <div class="mb-3">
                         <label for="visit-date">Date</label>
                         <input id="visit-date" v-model="form.date" type="date" class="form-control" required>
@@ -73,6 +84,15 @@ export const VisitsPage = {
                     <div class="mb-3">
                         <label for="visit-description">Description</label>
                         <textarea id="visit-description" v-model.trim="form.description" class="form-control" maxlength="8192" style="resize:vertical;" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="visit-vet">Veterinarian</label>
+                        <select id="visit-vet" v-model="form.vetId" class="form-select" required>
+                            <option value="" disabled>Select a veterinarian</option>
+                            <option v-for="vet in vets" :key="vet.id" :value="String(vet.id)">
+                                {{ vet.firstName }} {{ vet.lastName }}
+                            </option>
+                        </select>
                     </div>
                     <div>
                         <button class="btn btn-primary" type="submit" :disabled="submitting">
@@ -82,10 +102,14 @@ export const VisitsPage = {
                 </form>
                 <h3>Previous Visits</h3>
                 <table class="table">
+                    <thead>
+                        <tr><th>Date</th><th>Description</th><th>Veterinarian</th></tr>
+                    </thead>
                     <tbody>
                         <tr v-for="visit in visits" :key="visit.id">
                             <td class="col-sm-2">{{ visit.date }}</td>
                             <td style="white-space: pre-line">{{ visit.description }}</td>
+                            <td>{{ vetName(visit) }}</td>
                         </tr>
                     </tbody>
                 </table>
