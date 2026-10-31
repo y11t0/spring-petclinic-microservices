@@ -14,14 +14,21 @@ export const VisitsPage = {
         const ownerId = route.params.ownerId;
         const petId = route.params.petId;
         const visits = ref([]);
+        const vets = ref([]);
         const form = reactive({
             date: today(),
-            description: ''
+            description: '',
+            vetId: ''
         });
         const url = `/api/visit/owners/${ownerId}/pets/${petId}/visits`;
         const state = useRequest(async ({ signal }) => {
+            vets.value = requireArray(await request('/api/vet/vets', { signal }), 'Veterinarians could not be loaded.');
             visits.value = requireArray(await request(url, { signal }), 'Visits could not be loaded.');
         });
+        function vetName(vetId) {
+            const vet = vets.value.find(function (candidate) { return candidate.id === vetId; });
+            return vet ? `${vet.firstName} ${vet.lastName}` : '—';
+        }
         const submission = useSubmission();
 
         async function submit(event) {
@@ -35,7 +42,8 @@ export const VisitsPage = {
                     await request(url, {
                         ...jsonRequest('POST', {
                             date: form.date,
-                            description: form.description.trim()
+                            description: form.description.trim(),
+                            vetId: Number(form.vetId)
                         }),
                         signal
                     });
@@ -50,13 +58,15 @@ export const VisitsPage = {
 
         return {
             form,
+            vets,
             visits,
             loading: state.loading,
             failed: state.failed,
             failure: state.failure,
             submitting: submission.submitting,
             clearError,
-            submit
+            submit,
+            vetName
         };
     },
     template: `
@@ -71,6 +81,15 @@ export const VisitsPage = {
                         <input id="visit-date" v-model="form.date" type="date" class="form-control" required>
                     </div>
                     <div class="mb-3">
+                        <label for="visit-vet">Veterinarian</label>
+                        <select id="visit-vet" v-model="form.vetId" class="form-select" required>
+                            <option value="" disabled>Select a veterinarian</option>
+                            <option v-for="vet in vets" :key="vet.id" :value="String(vet.id)">
+                                {{ vet.firstName }} {{ vet.lastName }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label for="visit-description">Description</label>
                         <textarea id="visit-description" v-model.trim="form.description" class="form-control" maxlength="8192" style="resize:vertical;" required></textarea>
                     </div>
@@ -82,9 +101,13 @@ export const VisitsPage = {
                 </form>
                 <h3>Previous Visits</h3>
                 <table class="table">
+                    <thead>
+                        <tr><th>Date</th><th>Veterinarian</th><th>Description</th></tr>
+                    </thead>
                     <tbody>
                         <tr v-for="visit in visits" :key="visit.id">
                             <td class="col-sm-2">{{ visit.date }}</td>
+                            <td>{{ vetName(visit.vetId) }}</td>
                             <td style="white-space: pre-line">{{ visit.description }}</td>
                         </tr>
                     </tbody>
